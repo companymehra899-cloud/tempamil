@@ -48,6 +48,7 @@ function sessionHeaders(session = {}) {
   const headers = {};
   if (session.provider) headers["X-Flick-Provider"] = session.provider;
   if (session.sid) headers["X-Flick-Sid"] = session.sid;
+  if (session.address) headers["X-Flick-Address"] = session.address;
   if (session.token) headers.Authorization = `Bearer ${session.token}`;
   return headers;
 }

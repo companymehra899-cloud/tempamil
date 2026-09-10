@@ -18,6 +18,25 @@ const GUERRILLA_DOMAINS = [
   "guerrillamailblock.com",
 ];
 
+const TEMPIO_API = "https://api.internal.temp-mail.io/api/v3";
+const LOL_API = "https://api.tempmail.lol/v2";
+
+const TEMPIO_DOMAINS = [
+  "ozsaip.com",
+  "yzcalo.com",
+  "lnovic.com",
+  "ruutukf.com",
+  "gmeenramy.com",
+  "olipii.com",
+  "ooynib.com",
+];
+
+const LOL_DOMAINS = [
+  "imagesthere.com",
+  "prominentghost.com",
+  "26ai.art",
+];
+
 const app = express();
 app.use(express.json({ limit: "1mb" }));
 
@@ -40,6 +59,20 @@ async function mailFetch(path, options = {}) {
   const res = await fetch(`${MAIL_API}${path}`, {
     method: options.method || "GET",
     headers,
+    body: options.body,
+  });
+  return { status: res.status, data: await parseJson(res) };
+}
+
+async function jsonFetch(url, options = {}) {
+  const res = await fetch(url, {
+    method: options.method || "GET",
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "FlickMail/1.0",
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
     body: options.body,
   });
   return { status: res.status, data: await parseJson(res) };
@@ -75,6 +108,48 @@ function providerOf(req) {
 
 function guerrillaSid(req) {
   return req.headers["x-flick-sid"] || "";
+}
+
+function sessionAddress(req) {
+  return req.headers["x-flick-address"] || req.query.address || "";
+}
+
+function extraToken(req) {
+  const auth = req.headers.authorization || "";
+  if (auth.startsWith("Bearer ")) return auth.slice(7);
+  return req.headers["x-flick-sid"] || "";
+}
+
+function mapTempioList(data) {
+  const list = Array.isArray(data) ? data : [];
+  return list.map((item, index) => ({
+    id: String(item.id || item._id || index),
+    from: { address: item.from || item.sender || "unknown" },
+    subject: item.subject || "(no subject)",
+    intro: item.body_text || item.body || item.preview || "",
+    createdAt: item.created_at || item.createdAt || new Date().toISOString(),
+    seen: Boolean(item.seen),
+    provider: "tempio",
+    raw: item,
+  }));
+}
+
+function mapLolList(data) {
+  const list = Array.isArray(data?.emails) ? data.emails : [];
+  return list.map((item, index) => ({
+    id: String(item.id || item.uid || index),
+    from: { address: item.from || item.sender || "unknown" },
+    subject: item.subject || "(no subject)",
+    intro: item.body || item.html || "",
+    text: item.body || "",
+    html: item.html ? [item.html] : [],
+    createdAt: item.date
+      ? new Date(Number(item.date)).toISOString()
+      : new Date().toISOString(),
+    seen: false,
+    provider: "lol",
+    raw: item,
+  }));
 }
 
 function mapGuerrillaList(data, domain) {
@@ -115,9 +190,19 @@ app.get("/api/domains", async (_req, res) => {
       provider: "guerrilla",
       isActive: true,
     }));
+    const tempio = TEMPIO_DOMAINS.map((domain) => ({
+      domain,
+      provider: "tempio",
+      isActive: true,
+    }));
+    const lol = LOL_DOMAINS.map((domain) => ({
+      domain,
+      provider: "lol",
+      isActive: true,
+    }));
 
     const seen = new Set();
-    const merged = [...mailtm, ...guerrilla].filter((item) => {
+    const merged = [...mailtm, ...guerrilla, ...tempio, ...lol].filter((item) => {
       if (seen.has(item.domain)) return false;
       seen.add(item.domain);
       return true;
@@ -138,10 +223,12 @@ app.post("/api/inbox", async (req, res) => {
     }
 
     const chosenDomain = domain || String(address).split("@")[1];
+    const local = String(address).split("@")[0];
     const useGuerrilla = provider === "guerrilla" || GUERRILLA_DOMAINS.includes(chosenDomain);
+    const useTempio = provider === "tempio" || TEMPIO_DOMAINS.includes(chosenDomain);
+    const useLol = provider === "lol" || LOL_DOMAINS.includes(chosenDomain);
 
     if (useGuerrilla) {
-      const local = String(address).split("@")[0];
       const started = await guerrillaFetch({ f: "get_email_address", lang: "en" });
       const sid = started.data?.sid_token;
       if (!sid) {
@@ -161,6 +248,42 @@ app.post("/api/inbox", async (req, res) => {
         id: sidToken,
         address: `${local}@${chosenDomain}`,
         sid: sidToken,
+      });
+      return;
+    }
+
+    if (useTempio) {
+      const created = await jsonFetch(`${TEMPIO_API}/email/new`, {
+        method: "POST",
+        body: JSON.stringify({ name: local, domain: chosenDomain }),
+      });
+      if (created.status >= 400 || !created.data?.email) {
+        res.status(created.status >= 400 ? created.status : 502).json(created.data || { message: "Unable to create inbox" });
+        return;
+      }
+      res.json({
+        provider: "tempio",
+        id: created.data.email,
+        address: created.data.email,
+        token: created.data.token,
+      });
+      return;
+    }
+
+    if (useLol) {
+      const created = await jsonFetch(`${LOL_API}/inbox/create`, {
+        method: "POST",
+        body: JSON.stringify({ prefix: local, domain: chosenDomain }),
+      });
+      if (created.status >= 400 || !created.data?.address) {
+        res.status(created.status >= 400 ? created.status : 502).json(created.data || { message: "Unable to create inbox" });
+        return;
+      }
+      res.json({
+        provider: "lol",
+        id: created.data.token,
+        address: created.data.address,
+        token: created.data.token,
       });
       return;
     }
@@ -229,7 +352,8 @@ app.post("/api/token", async (req, res) => {
 
 app.get("/api/messages", async (req, res) => {
   try {
-    if (providerOf(req) === "guerrilla") {
+    const provider = providerOf(req);
+    if (provider === "guerrilla") {
       const sid = guerrillaSid(req);
       const domain = req.query.domain || "";
       const { status, data } = await guerrillaFetch({
@@ -238,6 +362,18 @@ app.get("/api/messages", async (req, res) => {
         sid_token: sid,
       });
       res.status(status).json(mapGuerrillaList(data, domain));
+      return;
+    }
+    if (provider === "tempio") {
+      const email = encodeURIComponent(sessionAddress(req));
+      const { status, data } = await jsonFetch(`${TEMPIO_API}/email/${email}/messages`);
+      res.status(status).json(mapTempioList(data));
+      return;
+    }
+    if (provider === "lol") {
+      const token = extraToken(req);
+      const { status, data } = await jsonFetch(`${LOL_API}/inbox?token=${encodeURIComponent(token)}`);
+      res.status(status).json(mapLolList(data));
       return;
     }
     const page = req.query.page || "1";
@@ -252,7 +388,8 @@ app.get("/api/messages", async (req, res) => {
 
 app.get("/api/messages/:id", async (req, res) => {
   try {
-    if (providerOf(req) === "guerrilla") {
+    const provider = providerOf(req);
+    if (provider === "guerrilla") {
       const sid = guerrillaSid(req);
       const { status, data } = await guerrillaFetch({
         f: "fetch_email",
@@ -271,6 +408,37 @@ app.get("/api/messages/:id", async (req, res) => {
       });
       return;
     }
+    if (provider === "tempio") {
+      const email = encodeURIComponent(sessionAddress(req));
+      const { status, data } = await jsonFetch(`${TEMPIO_API}/email/${email}/messages`);
+      const list = mapTempioList(data);
+      const found = list.find((item) => item.id === String(req.params.id)) || list[0];
+      const raw = found?.raw || {};
+      res.status(status).json({
+        id: found?.id || req.params.id,
+        from: found?.from || { address: "unknown" },
+        subject: found?.subject || "(no subject)",
+        text: raw.body_text || raw.body || found?.intro || "",
+        html: raw.body_html ? [raw.body_html] : [],
+        createdAt: found?.createdAt,
+      });
+      return;
+    }
+    if (provider === "lol") {
+      const token = extraToken(req);
+      const { status, data } = await jsonFetch(`${LOL_API}/inbox?token=${encodeURIComponent(token)}`);
+      const list = mapLolList(data);
+      const found = list.find((item) => item.id === String(req.params.id)) || list[0];
+      res.status(status).json({
+        id: found?.id || req.params.id,
+        from: found?.from || { address: "unknown" },
+        subject: found?.subject || "(no subject)",
+        text: found?.text || found?.intro || "",
+        html: found?.html || [],
+        createdAt: found?.createdAt,
+      });
+      return;
+    }
     const { status, data } = await mailFetch(`/messages/${encodeURIComponent(req.params.id)}`, {
       headers: authHeader(req),
     });
@@ -282,7 +450,8 @@ app.get("/api/messages/:id", async (req, res) => {
 
 app.delete("/api/messages/:id", async (req, res) => {
   try {
-    if (providerOf(req) === "guerrilla") {
+    const provider = providerOf(req);
+    if (provider === "guerrilla") {
       const sid = guerrillaSid(req);
       const { status } = await guerrillaFetch({
         f: "del_email",
@@ -290,6 +459,10 @@ app.delete("/api/messages/:id", async (req, res) => {
         sid_token: sid,
       });
       res.status(status === 204 ? 200 : status).json({ ok: true });
+      return;
+    }
+    if (provider === "tempio" || provider === "lol") {
+      res.json({ ok: true });
       return;
     }
     const { status, data } = await mailFetch(`/messages/${encodeURIComponent(req.params.id)}`, {
@@ -304,7 +477,8 @@ app.delete("/api/messages/:id", async (req, res) => {
 
 app.delete("/api/accounts/:id", async (req, res) => {
   try {
-    if (providerOf(req) === "guerrilla") {
+    const provider = providerOf(req);
+    if (provider === "guerrilla" || provider === "tempio" || provider === "lol") {
       res.json({ ok: true });
       return;
     }
