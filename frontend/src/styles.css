@@ -274,7 +274,7 @@ input {
   border: 4px solid #e2e8f0;
   background: #fff;
   overflow: hidden;
-  min-height: 720px;
+  min-height: 380px;
   display: flex;
   flex-direction: column;
 }
@@ -311,7 +311,7 @@ input {
 
 .table-wrap {
   overflow: auto;
-  min-height: 560px;
+  min-height: 260px;
   flex: 1;
 }
 
@@ -796,11 +796,11 @@ tbody tr.unread td {
   }
 
   .inbox-card {
-    min-height: 520px;
+    min-height: 320px;
   }
 
   .table-wrap {
-    min-height: 420px;
+    min-height: 220px;
     overflow-x: auto;
   }
 
