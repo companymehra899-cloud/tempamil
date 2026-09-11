@@ -1,5 +1,5 @@
 import express from "express";
-import { connectGmail, destroySession, getSession, listGmail, readGmail, setAlias } from "./gmail.js";
+import { connectGmail, deleteGmail, destroySession, getSession, listGmail, readGmail, setAlias } from "./gmail.js";
 
 const MAIL_API = "https://api.mail.tm";
 const GUERRILLA_API = "https://api.guerrillamail.com/ajax.php";
@@ -397,8 +397,11 @@ app.get("/api/messages", async (req, res) => {
     const provider = providerOf(req);
     if (provider === "gmail") {
       const id = extraToken(req) || guerrillaSid(req);
-      const session = getSession(id);
-      if (req.query.alias && session) setAlias(id, String(req.query.alias));
+      if (!getSession(id)) {
+        res.status(401).json({ message: "Gmail session expired. Connect again with an App Password." });
+        return;
+      }
+      if (req.query.alias) setAlias(id, String(req.query.alias));
       const messages = await listGmail(id);
       res.json(messages);
       return;
@@ -441,6 +444,10 @@ app.get("/api/messages/:id", async (req, res) => {
     const provider = providerOf(req);
     if (provider === "gmail") {
       const id = extraToken(req) || guerrillaSid(req);
+      if (!getSession(id)) {
+        res.status(401).json({ message: "Gmail session expired. Connect again with an App Password." });
+        return;
+      }
       const message = await readGmail(id, req.params.id);
       res.json(message);
       return;
@@ -517,7 +524,17 @@ app.delete("/api/messages/:id", async (req, res) => {
       res.status(status === 204 ? 200 : status).json({ ok: true });
       return;
     }
-    if (provider === "tempio" || provider === "lol" || provider === "gmail") {
+    if (provider === "gmail") {
+      const id = extraToken(req) || guerrillaSid(req);
+      if (!getSession(id)) {
+        res.status(401).json({ message: "Gmail session expired. Connect again with an App Password." });
+        return;
+      }
+      await deleteGmail(id, req.params.id);
+      res.json({ ok: true });
+      return;
+    }
+    if (provider === "tempio" || provider === "lol") {
       res.json({ ok: true });
       return;
     }

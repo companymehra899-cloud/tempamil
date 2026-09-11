@@ -82,6 +82,7 @@ export default function App() {
   const [gmailInput, setGmailInput] = useState(() => localStorage.getItem(GMAIL_KEY) || "");
   const [gmailAlias, setGmailAlias] = useState("");
   const [gmailAppPassword, setGmailAppPassword] = useState("");
+  const [gmailConn, setGmailConn] = useState(() => loadJson("flickmail-gmail-conn", null));
 
   const goTo = (name, slug) => {
     const next = slug ? { name, slug } : { name };
@@ -100,6 +101,12 @@ export default function App() {
     setSession(next);
     if (next) localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     else localStorage.removeItem(STORAGE_KEY);
+  };
+
+  const saveGmailConn = (next) => {
+    setGmailConn(next);
+    if (next) localStorage.setItem("flickmail-gmail-conn", JSON.stringify(next));
+    else localStorage.removeItem("flickmail-gmail-conn");
   };
 
   useEffect(() => {
@@ -157,6 +164,13 @@ export default function App() {
       setMessages(collectionMembers(data));
       setError("");
     } catch (err) {
+      const expired = /expired|not connected/i.test(err.message || "");
+      if (session?.provider === "gmail" && expired) {
+        saveGmailConn(null);
+        saveSession(null);
+        setGmailAlias("");
+        setMessages([]);
+      }
       setError(err.message);
     }
   }, [session]);
@@ -190,6 +204,10 @@ export default function App() {
         // already gone
       }
     }
+    if (session?.provider === "gmail") {
+      saveGmailConn(null);
+      setGmailAlias("");
+    }
     saveSession(null);
     setMessages([]);
     setSelected(null);
@@ -218,16 +236,20 @@ export default function App() {
   useEffect(() => {
     if (!session) return;
     refresh();
-    const timer = setInterval(refresh, 8000);
+    const wait = session.provider === "gmail" ? 30000 : 8000;
+    const timer = setInterval(refresh, wait);
     return () => clearInterval(timer);
   }, [session, refresh]);
 
   useEffect(() => {
-    if (session?.address) {
-      const [local, domain] = session.address.split("@");
-      if (local) setLocalPart(local);
-      if (domain) setChosenDomain(domain);
+    if (!session?.address) return;
+    if (session.provider === "gmail") {
+      setGmailAlias(session.address);
+      return;
     }
+    const [local, domain] = session.address.split("@");
+    if (local) setLocalPart(local);
+    if (domain) setChosenDomain(domain);
   }, [session]);
 
   const rows = session ? messages : SAMPLE;
@@ -320,7 +342,7 @@ export default function App() {
           </div>
           <div className="hint">
             {session
-              ? `Using @${session.domain || chosenDomain}. Auto-refreshing every 8 seconds.`
+              ? `Using @${session.domain || chosenDomain}. Auto-refreshing every ${session.provider === "gmail" ? "30" : "8"} seconds.`
               : "Choose an extension, then generate. Incoming mail appears in the box below."}
           </div>
         </div>
@@ -358,7 +380,8 @@ export default function App() {
                     setError("Enter your real Gmail address, like name@gmail.com");
                     return;
                   }
-                  if (!gmailAppPassword && session?.provider !== "gmail") {
+                  const live = session?.provider === "gmail" ? session : gmailConn;
+                  if (!gmailAppPassword && !live?.id) {
                     setError("Enter a Gmail App Password, not your normal password.");
                     return;
                   }
@@ -367,19 +390,36 @@ export default function App() {
                   setBusy(true);
                   setError("");
                   try {
-                    if (session?.provider === "gmail") {
-                      await api.setGmailAlias(session.id, alias);
-                      saveSession({ ...session, address: alias, domain: "gmail.com" });
+                    let next = live;
+                    if (live?.id) {
+                      try {
+                        await api.setGmailAlias(live.id, alias);
+                        next = { ...live, address: alias, domain: "gmail.com", provider: "gmail" };
+                      } catch {
+                        if (!gmailAppPassword) {
+                          throw new Error("Gmail session expired. Enter App Password again.");
+                        }
+                        const inbox = await api.connectGmail(saved, gmailAppPassword, alias);
+                        next = {
+                          id: inbox.id,
+                          address: inbox.address,
+                          token: inbox.token,
+                          provider: "gmail",
+                          domain: "gmail.com",
+                        };
+                      }
                     } else {
                       const inbox = await api.connectGmail(saved, gmailAppPassword, alias);
-                      saveSession({
+                      next = {
                         id: inbox.id,
                         address: inbox.address,
                         token: inbox.token,
                         provider: "gmail",
                         domain: "gmail.com",
-                      });
+                      };
                     }
+                    saveGmailConn(next);
+                    saveSession(next);
                     setGmailBase(saved);
                     setGmailInput(saved);
                     localStorage.setItem(GMAIL_KEY, saved);
@@ -394,7 +434,7 @@ export default function App() {
                   }
                 }}
               >
-                {session?.provider === "gmail" ? "New Gmail alias" : "Connect Gmail inbox"}
+                {session?.provider === "gmail" || gmailConn ? "New Gmail alias" : "Connect Gmail inbox"}
               </button>
               {(gmailAlias || session?.provider === "gmail") && (
                 <button
