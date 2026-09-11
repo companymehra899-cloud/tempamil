@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, collectionMembers, randomLocalPart, randomPassword } from "./api.js";
+import { api, collectionMembers, parseGmail, randomGmailTag, randomLocalPart, randomPassword } from "./api.js";
 import Layout from "./Layout.jsx";
 import { ArticlePage, ArticlesPage, PrivacyPage, TermsPage } from "./pages.jsx";
 
 const STORAGE_KEY = "flickmail-session";
 const STAR_KEY = "flickmail-stars";
+const GMAIL_KEY = "flickmail-gmail";
 
 const SAMPLE = [
   {
@@ -77,6 +78,10 @@ export default function App() {
   const [domains, setDomains] = useState([]);
   const [localPart, setLocalPart] = useState(() => randomLocalPart());
   const [chosenDomain, setChosenDomain] = useState("");
+  const [gmailBase, setGmailBase] = useState(() => localStorage.getItem(GMAIL_KEY) || "");
+  const [gmailInput, setGmailInput] = useState(() => localStorage.getItem(GMAIL_KEY) || "");
+  const [gmailAlias, setGmailAlias] = useState("");
+  const [gmailAppPassword, setGmailAppPassword] = useState("");
 
   const goTo = (name, slug) => {
     const next = slug ? { name, slug } : { name };
@@ -317,6 +322,94 @@ export default function App() {
             {session
               ? `Using @${session.domain || chosenDomain}. Auto-refreshing every 8 seconds.`
               : "Choose an extension, then generate. Incoming mail appears in the box below."}
+          </div>
+        </div>
+
+        <div className="generate-box gmail-box">
+          <div className="generate-label">Gmail OTP inbox</div>
+          <div className="composer gmail-composer">
+            <input
+              className="local-input"
+              value={gmailInput}
+              onChange={(e) => setGmailInput(e.target.value)}
+              spellCheck="false"
+              autoCapitalize="none"
+              placeholder="yourname@gmail.com"
+            />
+            <input
+              className="local-input"
+              type="password"
+              value={gmailAppPassword}
+              onChange={(e) => setGmailAppPassword(e.target.value)}
+              placeholder="Gmail App Password"
+            />
+          </div>
+          <div className="generate-row">
+            <div className="address">
+              {gmailAlias || (session?.provider === "gmail" ? session.address : "Connect Gmail, then generate an alias")}
+            </div>
+            <div className="chip-row">
+              <button
+                className="cta"
+                disabled={busy}
+                onClick={async () => {
+                  const parsed = parseGmail(gmailInput || gmailBase);
+                  if (!parsed) {
+                    setError("Enter your real Gmail address, like name@gmail.com");
+                    return;
+                  }
+                  if (!gmailAppPassword && session?.provider !== "gmail") {
+                    setError("Enter a Gmail App Password, not your normal password.");
+                    return;
+                  }
+                  const saved = `${parsed.local}@gmail.com`;
+                  const alias = `${parsed.local}+${randomGmailTag()}@gmail.com`;
+                  setBusy(true);
+                  setError("");
+                  try {
+                    if (session?.provider === "gmail") {
+                      await api.setGmailAlias(session.id, alias);
+                      saveSession({ ...session, address: alias, domain: "gmail.com" });
+                    } else {
+                      const inbox = await api.connectGmail(saved, gmailAppPassword, alias);
+                      saveSession({
+                        id: inbox.id,
+                        address: inbox.address,
+                        token: inbox.token,
+                        provider: "gmail",
+                        domain: "gmail.com",
+                      });
+                    }
+                    setGmailBase(saved);
+                    setGmailInput(saved);
+                    localStorage.setItem(GMAIL_KEY, saved);
+                    setGmailAlias(alias);
+                    setMessages([]);
+                    setSelected(null);
+                    setSelectedId(null);
+                  } catch (err) {
+                    setError(err.message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                {session?.provider === "gmail" ? "New Gmail alias" : "Connect Gmail inbox"}
+              </button>
+              {(gmailAlias || session?.provider === "gmail") && (
+                <button
+                  className="chip"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(gmailAlias || session.address);
+                  }}
+                >
+                  Copy
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="hint">
+            Create an App Password at myaccount.google.com/apppasswords. OTP mail for the alias will appear in the inbox below.
           </div>
         </div>
 

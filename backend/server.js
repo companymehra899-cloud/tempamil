@@ -1,4 +1,5 @@
 import express from "express";
+import { connectGmail, destroySession, getSession, listGmail, readGmail, setAlias } from "./gmail.js";
 
 const MAIL_API = "https://api.mail.tm";
 const GUERRILLA_API = "https://api.guerrillamail.com/ajax.php";
@@ -214,6 +215,47 @@ app.get("/api/domains", async (_req, res) => {
   }
 });
 
+app.post("/api/gmail/connect", async (req, res) => {
+  try {
+    const { email, password, alias } = req.body || {};
+    if (!email || !password) {
+      res.status(400).json({ message: "Gmail and App Password are required" });
+      return;
+    }
+    const connected = await connectGmail(String(email).trim().toLowerCase(), String(password).replace(/\s+/g, ""));
+    if (alias) setAlias(connected.id, alias);
+    res.json({
+      provider: "gmail",
+      id: connected.id,
+      address: alias || connected.email,
+      token: connected.id,
+      domain: "gmail.com",
+    });
+  } catch (err) {
+    res.status(401).json({
+      message: err?.message || "Could not connect Gmail. Use an App Password, not your normal password.",
+    });
+  }
+});
+
+app.post("/api/gmail/alias", async (req, res) => {
+  try {
+    const { id, alias } = req.body || {};
+    if (!id || !alias) {
+      res.status(400).json({ message: "id and alias are required" });
+      return;
+    }
+    const session = setAlias(id, alias);
+    if (!session) {
+      res.status(404).json({ message: "Gmail is not connected" });
+      return;
+    }
+    res.json({ ok: true, address: alias });
+  } catch (err) {
+    res.status(400).json({ message: err.message || "Unable to set alias" });
+  }
+});
+
 app.post("/api/inbox", async (req, res) => {
   try {
     const { address, password, domain, provider } = req.body || {};
@@ -353,6 +395,14 @@ app.post("/api/token", async (req, res) => {
 app.get("/api/messages", async (req, res) => {
   try {
     const provider = providerOf(req);
+    if (provider === "gmail") {
+      const id = extraToken(req) || guerrillaSid(req);
+      const session = getSession(id);
+      if (req.query.alias && session) setAlias(id, String(req.query.alias));
+      const messages = await listGmail(id);
+      res.json(messages);
+      return;
+    }
     if (provider === "guerrilla") {
       const sid = guerrillaSid(req);
       const domain = req.query.domain || "";
@@ -389,6 +439,12 @@ app.get("/api/messages", async (req, res) => {
 app.get("/api/messages/:id", async (req, res) => {
   try {
     const provider = providerOf(req);
+    if (provider === "gmail") {
+      const id = extraToken(req) || guerrillaSid(req);
+      const message = await readGmail(id, req.params.id);
+      res.json(message);
+      return;
+    }
     if (provider === "guerrilla") {
       const sid = guerrillaSid(req);
       const { status, data } = await guerrillaFetch({
@@ -461,7 +517,7 @@ app.delete("/api/messages/:id", async (req, res) => {
       res.status(status === 204 ? 200 : status).json({ ok: true });
       return;
     }
-    if (provider === "tempio" || provider === "lol") {
+    if (provider === "tempio" || provider === "lol" || provider === "gmail") {
       res.json({ ok: true });
       return;
     }
@@ -478,7 +534,8 @@ app.delete("/api/messages/:id", async (req, res) => {
 app.delete("/api/accounts/:id", async (req, res) => {
   try {
     const provider = providerOf(req);
-    if (provider === "guerrilla" || provider === "tempio" || provider === "lol") {
+    if (provider === "guerrilla" || provider === "tempio" || provider === "lol" || provider === "gmail") {
+      destroySession(req.params.id);
       res.json({ ok: true });
       return;
     }

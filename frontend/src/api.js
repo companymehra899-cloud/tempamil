@@ -36,6 +36,20 @@ export function randomLocalPart() {
   return `${word}${n}`;
 }
 
+export function parseGmail(value) {
+  const trimmed = String(value || "").trim().toLowerCase();
+  const match = trimmed.match(/^([a-z0-9.]+)(?:\+[a-z0-9._-]+)?@(gmail|googlemail)\.com$/);
+  if (!match) return null;
+  return { local: match[1], domain: "gmail.com" };
+}
+
+export function randomGmailTag() {
+  const words = ["shop", "otp", "paytm", "flipkart", "signup", "offer", "bank", "trial"];
+  const word = words[Math.floor(Math.random() * words.length)];
+  const n = Math.floor(100 + Math.random() * 900);
+  return `${word}${n}`;
+}
+
 export function collectionMembers(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.["hydra:member"])) return data["hydra:member"];
@@ -71,9 +85,12 @@ export const api = {
       body: JSON.stringify({ address, password }),
     }),
   messages: (session, page = 1) =>
-    request(`/api/messages?page=${page}&domain=${encodeURIComponent(session.domain || "")}`, {
-      headers: sessionHeaders(session),
-    }),
+    request(
+      `/api/messages?page=${page}&domain=${encodeURIComponent(session.domain || "")}&alias=${encodeURIComponent(session.address || "")}`,
+      {
+        headers: sessionHeaders(session),
+      }
+    ),
   message: (session, id) =>
     request(`/api/messages/${id}`, {
       headers: sessionHeaders(session),
@@ -87,5 +104,15 @@ export const api = {
     request(`/api/accounts/${id}`, {
       method: "DELETE",
       headers: sessionHeaders(session),
+    }),
+  connectGmail: (email, password, alias) =>
+    request("/api/gmail/connect", {
+      method: "POST",
+      body: JSON.stringify({ email, password, alias }),
+    }),
+  setGmailAlias: (id, alias) =>
+    request("/api/gmail/alias", {
+      method: "POST",
+      body: JSON.stringify({ id, alias }),
     }),
 };

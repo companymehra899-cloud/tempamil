@@ -189,6 +189,10 @@ input {
   margin-bottom: 12px;
 }
 
+.gmail-composer {
+  grid-template-columns: 1fr auto;
+}
+
 .local-input,
 .domain-select {
   width: 100%;
