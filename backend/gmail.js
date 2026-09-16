@@ -1,8 +1,13 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import crypto from "node:crypto";
+import { loadSessions, persistSessions } from "./store.js";
 
-const sessions = new Map();
+const sessions = loadSessions();
+
+function saveSessions() {
+  persistSessions(sessions);
+}
 
 const OTP_KEYWORD = /(otp|one[- ]?time|passcode|pass ?code|code|pin|verification|verify|confirm)/i;
 const OTP_TOKEN = /\b([A-Za-z0-9]{4,8})\b/g;
@@ -101,6 +106,25 @@ async function withClient(session, fn) {
   }
 }
 
+function isAuthError(err) {
+  const message = String(err?.message || "");
+  return Boolean(err?.authenticationFailed) || /auth|invalid credentials|login failed|username and password/i.test(message);
+}
+
+async function runGmail(id, fn) {
+  const session = sessions.get(id);
+  if (!session) throw new Error("Gmail session expired. Connect again with an App Password.");
+  try {
+    return await withClient(session, fn);
+  } catch (err) {
+    if (isAuthError(err)) {
+      destroySession(id);
+      throw new Error("Gmail session expired. Connect again with an App Password.");
+    }
+    throw err;
+  }
+}
+
 export async function connectGmail(email, password) {
   const session = { email, password, alias: `${email.split("@")[0]}@gmail.com` };
   await withClient(session, async (client) => {
@@ -109,6 +133,7 @@ export async function connectGmail(email, password) {
   });
   const id = randomId();
   sessions.set(id, session);
+  saveSessions();
   return { id, email: session.alias, account: session.email };
 }
 
@@ -123,6 +148,7 @@ export function setAlias(id, alias) {
     throw new Error("Alias must belong to the connected Gmail account");
   }
   session.alias = next;
+  saveSessions();
   return session;
 }
 
@@ -131,7 +157,9 @@ export function getSession(id) {
 }
 
 export function destroySession(id) {
-  sessions.delete(id);
+  const removed = sessions.delete(id);
+  if (removed) saveSessions();
+  return removed;
 }
 
 function mapMessage(parsed, uid, date) {
@@ -183,7 +211,7 @@ async function searchAliasUids(client, alias) {
 export async function listGmail(id) {
   const session = sessions.get(id);
   if (!session) throw new Error("Gmail session expired. Connect again with an App Password.");
-  return withClient(session, async (client) => {
+  return runGmail(id, async (client) => {
     const lock = await client.getMailboxLock("INBOX");
     try {
       const alias = session.alias || session.email;
@@ -207,7 +235,7 @@ export async function listGmail(id) {
 export async function readGmail(id, uid) {
   const session = sessions.get(id);
   if (!session) throw new Error("Gmail session expired. Connect again with an App Password.");
-  return withClient(session, async (client) => {
+  return runGmail(id, async (client) => {
     const lock = await client.getMailboxLock("INBOX");
     try {
       const fetched = await client.fetchOne(String(uid), { source: true, envelope: true, uid: true }, { uid: true });
@@ -223,7 +251,7 @@ export async function readGmail(id, uid) {
 export async function deleteGmail(id, uid) {
   const session = sessions.get(id);
   if (!session) throw new Error("Gmail session expired. Connect again with an App Password.");
-  return withClient(session, async (client) => {
+  return runGmail(id, async (client) => {
     const lock = await client.getMailboxLock("INBOX");
     try {
       await client.messageDelete(String(uid), { uid: true });

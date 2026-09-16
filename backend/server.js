@@ -39,7 +39,57 @@ const LOL_DOMAINS = [
 ];
 
 const app = express();
+app.set("trust proxy", 1);
 app.use(express.json({ limit: "1mb" }));
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  next();
+});
+
+function createRateLimit({ windowMs, max, message }) {
+  const hits = new Map();
+  const cleanup = setInterval(() => {
+    const now = Date.now();
+    for (const [ip, times] of hits) {
+      const fresh = times.filter((time) => now - time < windowMs);
+      if (fresh.length) hits.set(ip, fresh);
+      else hits.delete(ip);
+    }
+  }, Math.min(windowMs, 60000));
+  if (cleanup.unref) cleanup.unref();
+
+  return (req, res, next) => {
+    const ip = req.ip || req.socket?.remoteAddress || "unknown";
+    const now = Date.now();
+    const times = (hits.get(ip) || []).filter((time) => now - time < windowMs);
+    if (times.length >= max) {
+      const retry = Math.ceil((windowMs - (now - times[0])) / 1000);
+      res.setHeader("Retry-After", String(Math.max(1, retry)));
+      res.status(429).json({ message: message || "Too many requests. Please slow down." });
+      return;
+    }
+    times.push(now);
+    hits.set(ip, times);
+    next();
+  };
+}
+
+const generalLimit = createRateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  message: "Too many requests. Please wait a moment.",
+});
+
+const connectLimit = createRateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 12,
+  message: "Too many Gmail connection attempts. Try again in a few minutes.",
+});
+
+app.use("/api", generalLimit);
+app.use(["/api/gmail/connect", "/api/inbox", "/api/accounts", "/api/token"], connectLimit);
 
 async function parseJson(res) {
   const text = await res.text();

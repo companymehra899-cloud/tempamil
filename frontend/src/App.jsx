@@ -223,6 +223,7 @@ export default function App() {
     if (session?.provider === "gmail") {
       saveGmailConn(null);
       setGmailAlias("");
+      setGmailAppPassword("");
     }
     saveSession(null);
     setMessages([]);
@@ -379,6 +380,8 @@ export default function App() {
               type="password"
               value={gmailAppPassword}
               onChange={(e) => setGmailAppPassword(e.target.value)}
+              autoComplete="off"
+              name="flickmail-app-password"
               placeholder="Gmail App Password"
             />
           </div>
@@ -467,6 +470,7 @@ export default function App() {
                     setGmailInput(saved);
                     localStorage.setItem(GMAIL_KEY, saved);
                     setGmailAlias(alias);
+                    setGmailAppPassword("");
                     setMessages([]);
                     setSelected(null);
                     setSelectedId(null);
@@ -492,7 +496,7 @@ export default function App() {
             </div>
           </div>
           <div className="hint">
-            Create an App Password at myaccount.google.com/apppasswords.{" "}
+            App Password is sent once to the server and never saved in this browser.{" "}
             <button className="link-btn" onClick={() => goTo("article", "gmail-app-password")} type="button">
               Setup guide
             </button>

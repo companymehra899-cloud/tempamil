@@ -12,6 +12,7 @@ export const ARTICLES = [
       "Pick an alias tag (for example shop or otp) and choose a style: name+tag@gmail.com, na.me@gmail.com, or na.me+tag@gmail.com.",
       "Use the alias shown when a site asks for your email. The message lands in your real Gmail and appears in the inbox below.",
       "FlickMail detects the verification code in the mail and shows an OTP badge — tap Copy code and paste it into the site.",
+      "Your App Password is never saved in the browser. The server keeps it encrypted so a restart does not log you out, and you can discard the Gmail inbox to remove it any time.",
     ],
     body: [
       "All aliases belong to the same Gmail account. Anything sent to name+tag@gmail.com or na.me@gmail.com still arrives in your normal inbox — FlickMail just filters it so you only see mail for the alias you picked.",
@@ -74,6 +75,11 @@ export function PrivacyPage() {
           Your current inbox session (address, token, and starred message ids) is saved
           in local storage on your device so the page can reload mail. Clearing site
           data or discarding the inbox removes that information from the browser.
+        </p>
+        <p>
+          Your Gmail App Password is never written to browser storage. It is sent once
+          to the server, kept encrypted at rest, and only used to read mail for the
+          alias you selected. Discarding the Gmail inbox removes it immediately.
         </p>
       </section>
       <section>
