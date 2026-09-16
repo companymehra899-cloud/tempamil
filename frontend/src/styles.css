@@ -7,10 +7,8 @@
   --line-strong: #cbd5e1;
   --primary: #4f46e5;
   --primary-dark: #4338ca;
-  --primary-soft: #eef2ff;
   --danger: #b91c1c;
   --star: #f59e0b;
-  --header: #1e293b;
   --shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
@@ -207,11 +205,6 @@ input {
 
 .domain-select {
   cursor: pointer;
-}
-
-.at {
-  font-weight: 800;
-  color: var(--muted);
 }
 
 .generate-row {
@@ -906,10 +899,6 @@ tbody tr.unread td {
 
   .composer {
     grid-template-columns: 1fr;
-  }
-
-  .at {
-    display: none;
   }
 
   .generate-row {

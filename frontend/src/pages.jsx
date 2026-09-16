@@ -1,4 +1,4 @@
-export const ARTICLES = [
+const ARTICLES = [
   {
     slug: "gmail-app-password",
     title: "How to connect Gmail and read OTP mail in FlickMail",

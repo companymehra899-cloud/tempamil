@@ -72,12 +72,6 @@ export function dottedLocal(local, seedText = "") {
   return out;
 }
 
-export function gmailAliasParts(value) {
-  const parsed = parseGmail(value);
-  if (!parsed) return null;
-  return parsed;
-}
-
 export function buildGmailAlias(baseLocal, tag, style = "plus") {
   const base = String(baseLocal || "").split("@")[0].replace(/\+.*$/, "").replace(/\./g, "").toLowerCase();
   if (!base) return "";

@@ -1,4 +1,4 @@
-export default function Layout({ page, onNavigate, menuOpen, setMenuOpen, children }) {
+export default function Layout({ onNavigate, menuOpen, setMenuOpen, children }) {
   const go = (next, section) => (event) => {
     event.preventDefault();
     setMenuOpen(false);

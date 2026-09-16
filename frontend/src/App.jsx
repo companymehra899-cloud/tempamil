@@ -411,7 +411,7 @@ export default function App() {
   }, [selected]);
 
   const shell = (content) => (
-    <Layout page={page.name} onNavigate={goTo} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
+    <Layout onNavigate={goTo} menuOpen={menuOpen} setMenuOpen={setMenuOpen}>
       {content}
     </Layout>
   );
@@ -469,7 +469,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="generate-box gmail-box">
+        <div className="generate-box">
           <div className="generate-label">Gmail OTP inbox</div>
           <div className="composer gmail-composer">
             <input
