@@ -1,5 +1,5 @@
 import express from "express";
-import { connectGmail, deleteGmail, destroySession, getSession, listGmail, readGmail, setAlias } from "./gmail.js";
+import { connectGmail, deleteGmail, destroySession, extractOtp, getSession, listGmail, readGmail, setAlias } from "./gmail.js";
 
 const MAIL_API = "https://api.mail.tm";
 const GUERRILLA_API = "https://api.guerrillamail.com/ajax.php";
@@ -123,52 +123,67 @@ function extraToken(req) {
 
 function mapTempioList(data) {
   const list = Array.isArray(data) ? data : [];
-  return list.map((item, index) => ({
-    id: String(item.id || item._id || index),
-    from: { address: item.from || item.sender || "unknown" },
-    subject: item.subject || "(no subject)",
-    intro: item.body_text || item.body || item.preview || "",
-    createdAt: item.created_at || item.createdAt || new Date().toISOString(),
-    seen: Boolean(item.seen),
-    provider: "tempio",
-    raw: item,
-  }));
+  return list.map((item, index) => {
+    const subject = item.subject || "(no subject)";
+    const intro = item.body_text || item.body || item.preview || "";
+    return {
+      id: String(item.id || item._id || index),
+      from: { address: item.from || item.sender || "unknown" },
+      subject,
+      intro,
+      otp: extractOtp(subject, `${intro} ${item.body_html || ""}`),
+      createdAt: item.created_at || item.createdAt || new Date().toISOString(),
+      seen: Boolean(item.seen),
+      provider: "tempio",
+      raw: item,
+    };
+  });
 }
 
 function mapLolList(data) {
   const list = Array.isArray(data?.emails) ? data.emails : [];
-  return list.map((item, index) => ({
-    id: String(item.id || item.uid || index),
-    from: { address: item.from || item.sender || "unknown" },
-    subject: item.subject || "(no subject)",
-    intro: item.body || item.html || "",
-    text: item.body || "",
-    html: item.html ? [item.html] : [],
-    createdAt: item.date
-      ? new Date(Number(item.date)).toISOString()
-      : new Date().toISOString(),
-    seen: false,
-    provider: "lol",
-    raw: item,
-  }));
+  return list.map((item, index) => {
+    const subject = item.subject || "(no subject)";
+    const intro = item.body || item.html || "";
+    return {
+      id: String(item.id || item.uid || index),
+      from: { address: item.from || item.sender || "unknown" },
+      subject,
+      intro,
+      text: item.body || "",
+      html: item.html ? [item.html] : [],
+      otp: extractOtp(subject, `${intro}`),
+      createdAt: item.date
+        ? new Date(Number(item.date)).toISOString()
+        : new Date().toISOString(),
+      seen: false,
+      provider: "lol",
+      raw: item,
+    };
+  });
 }
 
 function mapGuerrillaList(data, domain) {
   const list = Array.isArray(data?.list) ? data.list : [];
   return list
     .filter((item) => String(item.mail_id) !== "1")
-    .map((item) => ({
-      id: String(item.mail_id),
-      from: { address: item.mail_from || "unknown" },
-      subject: item.mail_subject || "(no subject)",
-      intro: item.mail_excerpt || "",
-      createdAt: item.mail_timestamp
-        ? new Date(Number(item.mail_timestamp) * 1000).toISOString()
-        : new Date().toISOString(),
-      seen: Boolean(item.mail_read),
-      provider: "guerrilla",
-      domain,
-    }));
+    .map((item) => {
+      const subject = item.mail_subject || "(no subject)";
+      const intro = item.mail_excerpt || "";
+      return {
+        id: String(item.mail_id),
+        from: { address: item.mail_from || "unknown" },
+        subject,
+        intro,
+        otp: extractOtp(subject, intro),
+        createdAt: item.mail_timestamp
+          ? new Date(Number(item.mail_timestamp) * 1000).toISOString()
+          : new Date().toISOString(),
+        seen: Boolean(item.mail_read),
+        provider: "guerrilla",
+        domain,
+      };
+    });
 }
 
 app.get("/api/health", (_req, res) => {
@@ -459,12 +474,15 @@ app.get("/api/messages/:id", async (req, res) => {
         email_id: req.params.id,
         sid_token: sid,
       });
+      const guerrillaSubject = data?.mail_subject || "(no subject)";
+      const guerrillaBody = data?.mail_body || data?.mail_excerpt || "";
       res.status(status).json({
         id: String(data?.mail_id || req.params.id),
         from: { address: data?.mail_from || "unknown" },
-        subject: data?.mail_subject || "(no subject)",
-        text: data?.mail_body || data?.mail_excerpt || "",
+        subject: guerrillaSubject,
+        text: guerrillaBody,
         html: data?.mail_body ? [data.mail_body] : [],
+        otp: extractOtp(guerrillaSubject, guerrillaBody),
         createdAt: data?.mail_timestamp
           ? new Date(Number(data.mail_timestamp) * 1000).toISOString()
           : new Date().toISOString(),
@@ -477,12 +495,14 @@ app.get("/api/messages/:id", async (req, res) => {
       const list = mapTempioList(data);
       const found = list.find((item) => item.id === String(req.params.id)) || list[0];
       const raw = found?.raw || {};
+      const tempioText = raw.body_text || raw.body || found?.intro || "";
       res.status(status).json({
         id: found?.id || req.params.id,
         from: found?.from || { address: "unknown" },
         subject: found?.subject || "(no subject)",
-        text: raw.body_text || raw.body || found?.intro || "",
+        text: tempioText,
         html: raw.body_html ? [raw.body_html] : [],
+        otp: extractOtp(found?.subject, `${tempioText} ${raw.body_html || ""}`),
         createdAt: found?.createdAt,
       });
       return;
@@ -498,6 +518,7 @@ app.get("/api/messages/:id", async (req, res) => {
         subject: found?.subject || "(no subject)",
         text: found?.text || found?.intro || "",
         html: found?.html || [],
+        otp: found?.otp || "",
         createdAt: found?.createdAt,
       });
       return;

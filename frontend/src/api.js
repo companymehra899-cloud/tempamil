@@ -40,7 +40,7 @@ export function parseGmail(value) {
   const trimmed = String(value || "").trim().toLowerCase();
   const match = trimmed.match(/^([a-z0-9.]+)(?:\+[a-z0-9._-]+)?@(gmail|googlemail)\.com$/);
   if (!match) return null;
-  return { local: match[1], domain: "gmail.com" };
+  return { local: match[1].replace(/\./g, ""), domain: "gmail.com" };
 }
 
 export function randomGmailTag() {
@@ -48,6 +48,43 @@ export function randomGmailTag() {
   const word = words[Math.floor(Math.random() * words.length)];
   const n = Math.floor(100 + Math.random() * 900);
   return `${word}${n}`;
+}
+
+function seededRandom(seedText) {
+  let seed = 0;
+  for (let i = 0; i < seedText.length; i += 1) {
+    seed = (seed * 31 + seedText.charCodeAt(i)) >>> 0;
+  }
+  return () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+}
+
+export function dottedLocal(local, seedText = "") {
+  const base = String(local || "").replace(/\./g, "").toLowerCase();
+  if (base.length < 3) return base;
+  const rand = seededRandom(`${base}:${seedText}`);
+  let out = base[0];
+  for (let i = 1; i < base.length; i += 1) {
+    out += rand() < 0.4 ? `.${base[i]}` : base[i];
+  }
+  return out;
+}
+
+export function gmailAliasParts(value) {
+  const parsed = parseGmail(value);
+  if (!parsed) return null;
+  return parsed;
+}
+
+export function buildGmailAlias(baseLocal, tag, style = "plus") {
+  const base = String(baseLocal || "").split("@")[0].replace(/\+.*$/, "").replace(/\./g, "").toLowerCase();
+  if (!base) return "";
+  const cleanTag = String(tag || "").replace(/[^a-z0-9._-]/gi, "").slice(0, 24).toLowerCase() || randomGmailTag();
+  if (style === "dot") return `${dottedLocal(base, cleanTag)}@gmail.com`;
+  if (style === "both") return `${dottedLocal(base, cleanTag)}+${cleanTag}@gmail.com`;
+  return `${base}+${cleanTag}@gmail.com`;
 }
 
 export function collectionMembers(data) {

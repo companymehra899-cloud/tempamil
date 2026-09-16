@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, collectionMembers, parseGmail, randomGmailTag, randomLocalPart, randomPassword } from "./api.js";
+import {
+  api,
+  buildGmailAlias,
+  collectionMembers,
+  parseGmail,
+  randomGmailTag,
+  randomLocalPart,
+  randomPassword,
+} from "./api.js";
 import Layout from "./Layout.jsx";
 import { ArticlePage, ArticlesPage, PrivacyPage, TermsPage } from "./pages.jsx";
 
@@ -80,6 +88,8 @@ export default function App() {
   const [chosenDomain, setChosenDomain] = useState("");
   const [gmailBase, setGmailBase] = useState(() => localStorage.getItem(GMAIL_KEY) || "");
   const [gmailInput, setGmailInput] = useState(() => localStorage.getItem(GMAIL_KEY) || "");
+  const [gmailTag, setGmailTag] = useState(() => randomGmailTag());
+  const [gmailStyle, setGmailStyle] = useState("plus");
   const [gmailAlias, setGmailAlias] = useState("");
   const [gmailAppPassword, setGmailAppPassword] = useState("");
   const [gmailConn, setGmailConn] = useState(() => loadJson("flickmail-gmail-conn", null));
@@ -120,6 +130,12 @@ export default function App() {
   }, []);
 
   const selectedDomain = domains.find((item) => item.domain === chosenDomain) || domains[0];
+
+  const aliasPreview = useMemo(() => {
+    const base = parseGmail(gmailInput || gmailBase);
+    if (!base) return "";
+    return buildGmailAlias(base.local, gmailTag, gmailStyle);
+  }, [gmailInput, gmailBase, gmailTag, gmailStyle]);
 
   const createInbox = useCallback(async () => {
     setBusy(true);
@@ -366,6 +382,33 @@ export default function App() {
               placeholder="Gmail App Password"
             />
           </div>
+          <div className="composer gmail-composer alias-composer">
+            <input
+              className="local-input"
+              value={gmailTag}
+              onChange={(e) => setGmailTag(e.target.value)}
+              spellCheck="false"
+              autoCapitalize="none"
+              placeholder="alias tag e.g. shop, otp"
+            />
+            <select
+              className="domain-select"
+              value={gmailStyle}
+              onChange={(e) => setGmailStyle(e.target.value)}
+            >
+              <option value="plus">name+tag@gmail.com</option>
+              <option value="dot">na.me@gmail.com</option>
+              <option value="both">na.me+tag@gmail.com</option>
+            </select>
+            <button className="chip" onClick={() => setGmailTag(randomGmailTag())} type="button">
+              New tag
+            </button>
+          </div>
+          {aliasPreview && (
+            <div className="alias-preview">
+              Alias: <code>{aliasPreview}</code> — mail arrives in your Gmail, shown here.
+            </div>
+          )}
           <div className="generate-row">
             <div className="address">
               {gmailAlias || (session?.provider === "gmail" ? session.address : "Connect Gmail, then generate an alias")}
@@ -386,7 +429,7 @@ export default function App() {
                     return;
                   }
                   const saved = `${parsed.local}@gmail.com`;
-                  const alias = `${parsed.local}+${randomGmailTag()}@gmail.com`;
+                  const alias = buildGmailAlias(parsed.local, gmailTag, gmailStyle);
                   setBusy(true);
                   setError("");
                   try {
@@ -449,7 +492,10 @@ export default function App() {
             </div>
           </div>
           <div className="hint">
-            Create an App Password at myaccount.google.com/apppasswords. OTP mail for the alias will appear in the inbox below.
+            Create an App Password at myaccount.google.com/apppasswords.{" "}
+            <button className="link-btn" onClick={() => goTo("article", "gmail-app-password")} type="button">
+              Setup guide
+            </button>
           </div>
         </div>
 
@@ -510,9 +556,16 @@ export default function App() {
                       </div>
                     </td>
                     <td>
-                      <div className="subject-row truncate">
-                        <span>{item.subject || "(no subject)"}</span>
-                        {item.intro && <span className="preview"> - {item.intro}</span>}
+                      <div className="subject-cell">
+                        <div className="subject-row truncate">
+                          <span>{item.subject || "(no subject)"}</span>
+                          {item.intro && <span className="preview"> - {item.intro}</span>}
+                        </div>
+                        {item.otp && (
+                          <span className="otp-badge" title="Detected code">
+                            OTP {item.otp}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="time-cell">{relativeTime(item.createdAt)}</td>
@@ -528,6 +581,19 @@ export default function App() {
               <div className="reader-meta">
                 From {selected.from?.address || "unknown"} · {relativeTime(selected.createdAt)}
               </div>
+              {selected.otp && (
+                <div className="otp-row">
+                  <span className="otp-code">{selected.otp}</span>
+                  <button
+                    className="chip"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(selected.otp);
+                    }}
+                  >
+                    Copy code
+                  </button>
+                </div>
+              )}
               {htmlSrcDoc ? (
                 <iframe className="html-frame" title="Email body" srcDoc={htmlSrcDoc} />
               ) : (

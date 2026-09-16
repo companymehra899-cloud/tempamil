@@ -1,5 +1,25 @@
 export const ARTICLES = [
   {
+    slug: "gmail-app-password",
+    title: "How to connect Gmail and read OTP mail in FlickMail",
+    date: "September 16, 2026",
+    excerpt: "Create an App Password once, then use name+tag@gmail.com aliases and read the code right here.",
+    steps: [
+      "Open your Google Account security page and turn on 2-Step Verification. App Passwords only work when 2-Step Verification is enabled.",
+      "Go to myaccount.google.com/apppasswords, type a name like FlickMail, and click Create.",
+      "Copy the 16-character App Password Google shows. This is not your normal Gmail password.",
+      "In the Gmail OTP inbox box above, enter your real Gmail address and paste the App Password, then click Connect Gmail inbox.",
+      "Pick an alias tag (for example shop or otp) and choose a style: name+tag@gmail.com, na.me@gmail.com, or na.me+tag@gmail.com.",
+      "Use the alias shown when a site asks for your email. The message lands in your real Gmail and appears in the inbox below.",
+      "FlickMail detects the verification code in the mail and shows an OTP badge — tap Copy code and paste it into the site.",
+    ],
+    body: [
+      "All aliases belong to the same Gmail account. Anything sent to name+tag@gmail.com or na.me@gmail.com still arrives in your normal inbox — FlickMail just filters it so you only see mail for the alias you picked.",
+      "If a site refuses the +tag style, switch the style to dots (na.me@gmail.com). Some sites strip or block plus signs, while dots are almost always accepted.",
+      "Never share your App Password with anyone. You can remove it any time from the same Google App Passwords page.",
+    ],
+  },
+  {
     slug: "what-is-temp-email",
     title: "What is a temporary email address?",
     date: "September 8, 2026",
@@ -174,6 +194,13 @@ export function ArticlePage({ slug, onBack }) {
       <button className="chip" onClick={onBack}>All articles</button>
       <p className="kicker">{article.date}</p>
       <h1>{article.title}</h1>
+      {article.steps && (
+        <ol className="steps">
+          {article.steps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+      )}
       {article.body.map((para) => (
         <p key={para}>{para}</p>
       ))}

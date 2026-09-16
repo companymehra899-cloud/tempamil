@@ -4,8 +4,42 @@ import crypto from "node:crypto";
 
 const sessions = new Map();
 
+const OTP_KEYWORD = /(otp|one[- ]?time|passcode|pass ?code|code|pin|verification|verify|confirm)/i;
+const OTP_TOKEN = /\b([A-Za-z0-9]{4,8})\b/g;
+const OTP_YEAR = /^(19|20)\d{2}$/;
+
 function randomId() {
   return crypto.randomBytes(18).toString("hex");
+}
+
+export function extractOtp(subject, text) {
+  const body = String(text || "");
+  const haystack = `${subject || ""}\n${body}`;
+  if (!haystack.trim()) return "";
+
+  const subjectHasKeyword = OTP_KEYWORD.test(String(subject || ""));
+  OTP_TOKEN.lastIndex = 0;
+  let match;
+  let fallback = "";
+  while ((match = OTP_TOKEN.exec(haystack))) {
+    const value = match[1];
+    if (!/\d/.test(value)) continue;
+    if (OTP_YEAR.test(value) && value.length === 4) continue;
+    const before = haystack.slice(Math.max(0, match.index - 30), match.index);
+    if (OTP_KEYWORD.test(before)) return value;
+    if (fallback) continue;
+    const after = haystack.slice(match.index + value.length, match.index + value.length + 30);
+    if (OTP_KEYWORD.test(after) || subjectHasKeyword) fallback = value;
+  }
+  return fallback;
+}
+
+function normalizeLocal(value) {
+  return String(value || "")
+    .split("@")[0]
+    .split("+")[0]
+    .replace(/\./g, "")
+    .toLowerCase();
 }
 
 function decodeText(value) {
@@ -75,13 +109,20 @@ export async function connectGmail(email, password) {
   });
   const id = randomId();
   sessions.set(id, session);
-  return { id, email: session.alias };
+  return { id, email: session.alias, account: session.email };
 }
 
 export function setAlias(id, alias) {
   const session = sessions.get(id);
   if (!session) return null;
-  session.alias = alias;
+  const next = String(alias || "").trim().toLowerCase();
+  if (!/^[a-z0-9._+-]+@(gmail|googlemail)\.com$/.test(next)) {
+    throw new Error("Enter a valid Gmail alias, like name+tag@gmail.com");
+  }
+  if (normalizeLocal(next) !== normalizeLocal(session.email)) {
+    throw new Error("Alias must belong to the connected Gmail account");
+  }
+  session.alias = next;
   return session;
 }
 
@@ -97,14 +138,16 @@ function mapMessage(parsed, uid, date) {
   const from = parsed.from?.value?.[0]?.address || parsed.from?.text || "unknown";
   const html = parsed.html ? [String(parsed.html)] : [];
   const text = parsed.text || parsed.textAsHtml || "";
+  const subject = decodeText(parsed.subject) || "(no subject)";
   const created = date || parsed.date || new Date();
   return {
     id: String(uid),
     from: { address: from },
-    subject: decodeText(parsed.subject) || "(no subject)",
+    subject,
     intro: String(text).replace(/\s+/g, " ").slice(0, 140),
     text,
     html,
+    otp: extractOtp(subject, `${text} ${html.join(" ")}`),
     createdAt: created instanceof Date ? created.toISOString() : new Date(created).toISOString(),
     seen: true,
     provider: "gmail",
