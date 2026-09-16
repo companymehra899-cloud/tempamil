@@ -756,6 +756,93 @@ export default function App() {
         <cite>- FlickMail</cite>
       </section>
 
+      <section className="intro-seo" id="introduction">
+        <h2>Introduction to FlickMail: Free Temporary Email, Disposable Inbox and Gmail OTP Inbox</h2>
+
+        <p>
+          FlickMail is a free temp mail service that hands you a temporary email address in a
+          single click, which is why people also describe it as a one click email and instant
+          email tool. A temporary email, also known as disposable email, throwaway email,
+          burner email, junk email or simply fake email, lets you sign up on a website without
+          handing over your personal mailbox. Instead of exposing your private Gmail, you open a
+          temp inbox, copy the temp mail address and let all the junk mail land there. It works
+          much like a classic 10 minute mail tool, except you decide when the disposable inbox
+          is discarded, and it stays available as long as you need a free temp mail address.
+        </p>
+
+        <p>
+          The moment a website asks you to verify your email, the confirmation link or the one
+          time password arrives in your temporary inbox within seconds. You can read email
+          online, copy the verification code and finish the email verification without touching
+          your real account. That is exactly why people search for temp mail for OTP, temp mail
+          for verification, one time password inbox and signup verification without giving away
+          a personal address. FlickMail behaves like a simple browser email and webmail style
+          inbox, so you can receive email online from a phone, tablet or desktop.
+        </p>
+
+        <p>
+          There is no registration, no phone number and no personal detail required, which makes
+          it an anonymous email address and an email without registration that you can use
+          instantly. Online privacy is the biggest reason people look for a private temp mail:
+          you protect your identity, stop spam email, avoid spam lists and keep your inbox
+          clean. Think of FlickMail as an email spam blocker and a spam free inbox that guards
+          your email privacy and data privacy while you shop, browse and register on new
+          websites.
+        </p>
+
+        <p>
+          If you already own a Gmail account, FlickMail also offers a Gmail OTP inbox with many
+          Gmail alias options. You can build a gmail plus alias such as name+shop@gmail.com, use
+          the dotted gmail style like na.me@gmail.com, or combine the gmail dot trick and the
+          gmail plus trick to create an almost endless set of addresses. Every one of those
+          email alias addresses still lands in the same mailbox, so it behaves like a catch all
+          inbox, a catch all email and an email alias generator in one place. That makes it a
+          practical temporary Gmail account for a one time signup, a fake Gmail address for a
+          form, or a temp Gmail you never have to clean up.
+        </p>
+
+        <p>
+          Our temp mail generator and email address generator create a random email each time
+          you press the button, so you never have to invent a username and you can generate
+          email on demand. This disposable email service keeps several active domains and
+          refreshes the disposable inbox automatically, so new mail appears in your temporary
+          mailbox without a reload. Use it as a dummy email, a dummy email address or a spam
+          email address for forms and offers you do not trust, and treat it as the throwaway
+          inbox you always wanted, complete with a fresh disposable email address every time.
+        </p>
+
+        <p>
+          Whether you are looking for a 10 minute mail replacement, a 10minutemail alternative,
+          a Mailinator alternative, a Guerrilla Mail alternative, a tempmail alternative or a
+          tempmail.org style tool, FlickMail keeps the flow short. It is a mobile friendly temp
+          mail app that runs on Android, iPhone and desktop right inside the browser, so temp
+          mail for Android and temp mail for iPhone users get the same experience as desktop
+          visitors. Developers can even reach for the temp mail API, or an API temp mail
+          integration, to automate test email address creation during QA testing.
+        </p>
+
+        <p>
+          Use a free temp mail for signup when you only want a trial, a newsletter signup, a
+          coupon signup or a shopping discount email without the follow up marketing. It works
+          as a free email address and a random email you can throw away, and it is a safe email
+          for signups, a test email address for developers and an inbox for testing new apps
+          before they earn your real address. From email for Facebook signup to email for
+          Instagram signup and developer email testing, a disposable email keeps your personal
+          mailbox out of the equation.
+        </p>
+
+        <p>
+          Everything in FlickMail is treated like an expiring email. Once you are finished you
+          discard the inbox and the address is gone, just like a self destructing email or a
+          burn after reading email. There is nothing to install, no account to remember and no
+          password to store, so generating a fake email generator style address takes only a
+          second. If you want a secure temp mail, a no signup email, an instant temp mail and a
+          temporary email that quietly disappears after use, FlickMail is built for exactly
+          that.
+        </p>
+
+      </section>
+
     </>
   );
 }
