@@ -124,10 +124,19 @@ export default function App() {
       .then((data) => {
         const list = collectionMembers(data).filter((item) => item.domain);
         setDomains(list);
-        if (!chosenDomain && list[0]?.domain) setChosenDomain(list[0].domain);
+        if (!chosenDomain && list.length) {
+          setChosenDomain(list[Math.floor(Math.random() * list.length)].domain);
+        }
       })
       .catch((err) => setError(err.message));
   }, []);
+
+  const randomizeAddress = useCallback(() => {
+    setLocalPart(randomLocalPart());
+    if (domains.length) {
+      setChosenDomain(domains[Math.floor(Math.random() * domains.length)].domain);
+    }
+  }, [domains]);
 
   const selectedDomain = domains.find((item) => item.domain === chosenDomain) || domains[0];
 
@@ -316,37 +325,14 @@ export default function App() {
         {error && <p className="error">{error}</p>}
         <div className="generate-box">
           <div className="generate-label">Your temporary email</div>
-          <div className="composer">
-            <input
-              className="local-input"
-              value={localPart}
-              onChange={(e) => setLocalPart(e.target.value)}
-              spellCheck="false"
-              autoCapitalize="none"
-              placeholder="username"
-            />
-            <span className="at">@</span>
-            <select
-              className="domain-select"
-              value={chosenDomain}
-              onChange={(e) => setChosenDomain(e.target.value)}
-            >
-              {domains.length === 0 && <option value="">Loading domains...</option>}
-              {domains.map((item) => (
-                <option key={`${item.provider}-${item.domain}`} value={item.domain}>
-                  {item.domain}
-                </option>
-              ))}
-            </select>
-          </div>
           <div className="generate-row">
-            <div className="address">{session?.address || `${localPart || "username"}@${chosenDomain || "choose-extension"}`}</div>
+            <div className="address">{session?.address || `${localPart}@${chosenDomain || "loading-domains"}`}</div>
             <div className="chip-row">
               <button className="cta" onClick={createInbox} disabled={busy || !chosenDomain}>
                 {session ? "Generate new" : "Generate email"}
                 <Icon d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" size={18} />
               </button>
-              <button className="chip" onClick={() => setLocalPart(randomLocalPart())} disabled={busy}>
+              <button className="chip" onClick={randomizeAddress} disabled={busy}>
                 Random
               </button>
               {session && (
@@ -360,7 +346,7 @@ export default function App() {
           <div className="hint">
             {session
               ? `Using @${session.domain || chosenDomain}. Auto-refreshing every ${session.provider === "gmail" ? "30" : "8"} seconds.`
-              : "Choose an extension, then generate. Incoming mail appears in the box below."}
+              : "Your address is picked at random. Incoming mail appears in the box below."}
           </div>
         </div>
 
