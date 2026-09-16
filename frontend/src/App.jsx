@@ -93,6 +93,7 @@ export default function App() {
   const [gmailAlias, setGmailAlias] = useState("");
   const [gmailAppPassword, setGmailAppPassword] = useState("");
   const [gmailConn, setGmailConn] = useState(() => loadJson("flickmail-gmail-conn", null));
+  const [gmailAliasList, setGmailAliasList] = useState(() => loadJson("flickmail-gmail-aliases", {}));
 
   const goTo = (name, slug) => {
     const next = slug ? { name, slug } : { name };
@@ -118,6 +119,25 @@ export default function App() {
     if (next) localStorage.setItem("flickmail-gmail-conn", JSON.stringify(next));
     else localStorage.removeItem("flickmail-gmail-conn");
   };
+
+  const updateAliasList = useCallback((base, updater) => {
+    if (!base) return;
+    setGmailAliasList((prev) => {
+      const current = prev[base] || [];
+      const list = typeof updater === "function" ? updater(current) : updater;
+      const next = { ...prev, [base]: list };
+      localStorage.setItem("flickmail-gmail-aliases", JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const gmailBaseAddress = useMemo(() => {
+    const parsed = parseGmail(gmailInput || gmailBase);
+    return parsed ? `${parsed.local}@gmail.com` : "";
+  }, [gmailInput, gmailBase]);
+
+  const savedAliases = gmailBaseAddress ? gmailAliasList[gmailBaseAddress] || [] : [];
+  const activeGmailAlias = session?.provider === "gmail" ? session.address : gmailAlias;
 
   useEffect(() => {
     api.domains()
@@ -240,6 +260,99 @@ export default function App() {
     setSelectedId(null);
   };
 
+  const switchGmailAlias = async (alias, baseHint) => {
+    if (!alias) return;
+    const live = session?.provider === "gmail" ? session : gmailConn;
+    const base = baseHint || gmailBaseAddress;
+    if (!live?.id && !gmailAppPassword) {
+      setError("Enter a Gmail App Password, not your normal password.");
+      return;
+    }
+    if (live?.id && alias === session?.address) {
+      setGmailAlias(alias);
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      let next = null;
+      if (live?.id) {
+        try {
+          await api.setGmailAlias(live.id, alias);
+          next = { ...live, address: alias, domain: "gmail.com", provider: "gmail" };
+        } catch {
+          if (!gmailAppPassword) {
+            throw new Error("Gmail session expired. Enter App Password again.");
+          }
+        }
+      }
+      if (!next) {
+        if (!base) throw new Error("Enter your real Gmail address, like name@gmail.com");
+        const inbox = await api.connectGmail(base, gmailAppPassword, alias);
+        next = {
+          id: inbox.id,
+          address: inbox.address,
+          token: inbox.token,
+          provider: "gmail",
+          domain: "gmail.com",
+        };
+      }
+      saveGmailConn(next);
+      saveSession(next);
+      if (base) {
+        setGmailBase(base);
+        setGmailInput(base);
+        localStorage.setItem(GMAIL_KEY, base);
+        updateAliasList(base, (current) => (current.includes(alias) ? current : [...current, alias]));
+      }
+      setGmailAlias(alias);
+      setGmailAppPassword("");
+      setMessages([]);
+      setSelected(null);
+      setSelectedId(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const applyGmailAlias = (alias) => switchGmailAlias(alias, gmailBaseAddress);
+
+  const addGmailAlias = async () => {
+    const parsed = parseGmail(gmailInput || gmailBase);
+    if (!parsed) {
+      setError("Enter your real Gmail address, like name@gmail.com");
+      return;
+    }
+    const saved = `${parsed.local}@gmail.com`;
+    const alias = buildGmailAlias(parsed.local, gmailTag, gmailStyle);
+    await switchGmailAlias(alias, saved);
+  };
+
+  const removeGmailAlias = async (alias) => {
+    const list = savedAliases.filter((item) => item !== alias);
+    updateAliasList(gmailBaseAddress, list);
+    if (session?.address !== alias) return;
+    const nextAlias = list[0];
+    if (nextAlias) {
+      await switchGmailAlias(nextAlias, gmailBaseAddress);
+    } else {
+      saveGmailConn(null);
+      setGmailAlias("");
+      setGmailAppPassword("");
+      saveSession(null);
+      setMessages([]);
+      setSelected(null);
+      setSelectedId(null);
+    }
+  };
+
+  const copyGmailAlias = async (alias) => {
+    if (!alias) return;
+    await navigator.clipboard.writeText(alias);
+  };
+
   const deleteCurrent = async () => {
     if ((!session?.token && !session?.sid) || !selectedId || selected?.sample) return;
     try {
@@ -271,12 +384,18 @@ export default function App() {
     if (!session?.address) return;
     if (session.provider === "gmail") {
       setGmailAlias(session.address);
+      setGmailInput((prev) => prev || session.address);
+      const base = gmailBaseAddress || (parseGmail(session.address) ? `${parseGmail(session.address).local}@gmail.com` : "");
+      const list = gmailAliasList[base] || [];
+      if (base && !list.includes(session.address)) {
+        updateAliasList(base, [...list, session.address]);
+      }
       return;
     }
     const [local, domain] = session.address.split("@");
     if (local) setLocalPart(local);
     if (domain) setChosenDomain(domain);
-  }, [session]);
+  }, [session, gmailAliasList, gmailBaseAddress, updateAliasList]);
 
   const rows = session ? messages : SAMPLE;
   const visible = rows.filter((item) => {
@@ -395,87 +514,49 @@ export default function App() {
           </div>
           {aliasPreview && (
             <div className="alias-preview">
-              Alias: <code>{aliasPreview}</code> — mail arrives in your Gmail, shown here.
+              Next alias: <code>{aliasPreview}</code>
+            </div>
+          )}
+          {savedAliases.length > 0 && (
+            <div className="alias-list">
+              {savedAliases.map((item) => (
+                <div key={item} className={item === activeGmailAlias ? "alias-item active" : "alias-item"}>
+                  <button
+                    className="alias-open"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => applyGmailAlias(item)}
+                    title="Use this alias"
+                  >
+                    {item}
+                  </button>
+                  <button className="chip" type="button" onClick={() => copyGmailAlias(item)}>
+                    Copy
+                  </button>
+                  <button
+                    className="chip danger"
+                    type="button"
+                    onClick={() => removeGmailAlias(item)}
+                    disabled={busy}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
             </div>
           )}
           <div className="generate-row">
             <div className="address">
-              {gmailAlias || (session?.provider === "gmail" ? session.address : "Connect Gmail, then generate an alias")}
+              {activeGmailAlias || "Connect Gmail, then generate an alias"}
             </div>
             <div className="chip-row">
-              <button
-                className="cta"
-                disabled={busy}
-                onClick={async () => {
-                  const parsed = parseGmail(gmailInput || gmailBase);
-                  if (!parsed) {
-                    setError("Enter your real Gmail address, like name@gmail.com");
-                    return;
-                  }
-                  const live = session?.provider === "gmail" ? session : gmailConn;
-                  if (!gmailAppPassword && !live?.id) {
-                    setError("Enter a Gmail App Password, not your normal password.");
-                    return;
-                  }
-                  const saved = `${parsed.local}@gmail.com`;
-                  const alias = buildGmailAlias(parsed.local, gmailTag, gmailStyle);
-                  setBusy(true);
-                  setError("");
-                  try {
-                    let next = live;
-                    if (live?.id) {
-                      try {
-                        await api.setGmailAlias(live.id, alias);
-                        next = { ...live, address: alias, domain: "gmail.com", provider: "gmail" };
-                      } catch {
-                        if (!gmailAppPassword) {
-                          throw new Error("Gmail session expired. Enter App Password again.");
-                        }
-                        const inbox = await api.connectGmail(saved, gmailAppPassword, alias);
-                        next = {
-                          id: inbox.id,
-                          address: inbox.address,
-                          token: inbox.token,
-                          provider: "gmail",
-                          domain: "gmail.com",
-                        };
-                      }
-                    } else {
-                      const inbox = await api.connectGmail(saved, gmailAppPassword, alias);
-                      next = {
-                        id: inbox.id,
-                        address: inbox.address,
-                        token: inbox.token,
-                        provider: "gmail",
-                        domain: "gmail.com",
-                      };
-                    }
-                    saveGmailConn(next);
-                    saveSession(next);
-                    setGmailBase(saved);
-                    setGmailInput(saved);
-                    localStorage.setItem(GMAIL_KEY, saved);
-                    setGmailAlias(alias);
-                    setGmailAppPassword("");
-                    setMessages([]);
-                    setSelected(null);
-                    setSelectedId(null);
-                  } catch (err) {
-                    setError(err.message);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                {session?.provider === "gmail" || gmailConn ? "New Gmail alias" : "Connect Gmail inbox"}
+              <button className="cta" disabled={busy} onClick={addGmailAlias}>
+                {savedAliases.length || session?.provider === "gmail" || gmailConn
+                  ? "Add alias"
+                  : "Connect Gmail inbox"}
               </button>
-              {(gmailAlias || session?.provider === "gmail") && (
-                <button
-                  className="chip"
-                  onClick={async () => {
-                    await navigator.clipboard.writeText(gmailAlias || session.address);
-                  }}
-                >
+              {activeGmailAlias && (
+                <button className="chip" type="button" onClick={() => copyGmailAlias(activeGmailAlias)}>
                   Copy
                 </button>
               )}
