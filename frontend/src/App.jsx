@@ -797,6 +797,7 @@ export default function App() {
               Gmail. OTP still lands in your real inbox.
             </dd>
           </div>
+        </dl>
       </section>
 
       <section className="pull">
