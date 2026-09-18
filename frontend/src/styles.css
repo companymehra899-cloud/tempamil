@@ -232,6 +232,35 @@ input {
   font-size: 13px;
 }
 
+.copied {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.gmail-lead {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.gmail-steps {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.gmail-steps li {
+  margin: 0 0 2px;
+}
+
 .alias-composer {
   grid-template-columns: 1fr minmax(200px, 0.8fr) auto;
 }

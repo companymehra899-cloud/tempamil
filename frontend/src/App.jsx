@@ -94,6 +94,7 @@ export default function App() {
   const [gmailAppPassword, setGmailAppPassword] = useState("");
   const [gmailConn, setGmailConn] = useState(() => loadJson("flickmail-gmail-conn", null));
   const [gmailAliasList, setGmailAliasList] = useState(() => loadJson("flickmail-gmail-aliases", {}));
+  const [copied, setCopied] = useState("");
 
   const goTo = (name, slug) => {
     const next = slug ? { name, slug } : { name };
@@ -236,9 +237,19 @@ export default function App() {
     }
   };
 
+  const copyText = async (value, label = "Copied") => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(label);
+      setTimeout(() => setCopied(""), 1800);
+    } catch {
+      setError("Copy failed. Select the text and copy it manually.");
+    }
+  };
+
   const copyAddress = async () => {
-    if (!session?.address) return;
-    await navigator.clipboard.writeText(session.address);
+    await copyText(session?.address, "Address copied");
   };
 
   const destroyInbox = async () => {
@@ -307,11 +318,14 @@ export default function App() {
       }
       setGmailAlias(alias);
       setGmailAppPassword("");
+      setGmailTag(randomGmailTag());
       setMessages([]);
       setSelected(null);
       setSelectedId(null);
+      return true;
     } catch (err) {
       setError(err.message);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -326,7 +340,16 @@ export default function App() {
       return;
     }
     const saved = `${parsed.local}@gmail.com`;
-    const alias = buildGmailAlias(parsed.local, gmailTag, gmailStyle);
+    const existing = gmailAliasList[saved] || [];
+    let tag = gmailTag;
+    let alias = buildGmailAlias(parsed.local, tag, gmailStyle);
+    let tries = 0;
+    while (existing.includes(alias) && tries < 25) {
+      tag = randomGmailTag();
+      alias = buildGmailAlias(parsed.local, tag, gmailStyle);
+      tries += 1;
+    }
+    setGmailTag(tag);
     await switchGmailAlias(alias, saved);
   };
 
@@ -349,8 +372,7 @@ export default function App() {
   };
 
   const copyGmailAlias = async (alias) => {
-    if (!alias) return;
-    await navigator.clipboard.writeText(alias);
+    await copyText(alias, "Gmail address copied");
   };
 
   const deleteCurrent = async () => {
@@ -437,40 +459,23 @@ export default function App() {
             </svg>
           ))}
         </div>
-        <p className="quote">Free temporary email in one click. Keep spam off your real inbox.</p>
+        <p className="quote">One Gmail. Unlimited extra Gmail addresses for OTP. Keep spam off your real inbox.</p>
       </section>
 
       <div className="wrap" id="inbox">
+        {copied && <p className="copied">{copied}</p>}
         {error && <p className="error">{error}</p>}
-        <div className="generate-box">
-          <div className="generate-label">Your temporary email</div>
-          <div className="generate-row">
-            <div className="address">{session?.address || `${localPart}@${chosenDomain || "loading-domains"}`}</div>
-            <div className="chip-row">
-              <button className="cta" onClick={createInbox} disabled={busy || !chosenDomain}>
-                {session ? "Generate new" : "Generate email"}
-                <Icon d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" size={18} />
-              </button>
-              <button className="chip" onClick={randomizeAddress} disabled={busy}>
-                Random
-              </button>
-              {session && (
-                <>
-                  <button className="chip" onClick={copyAddress}>Copy</button>
-                  <button className="chip danger" onClick={destroyInbox}>Discard</button>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="hint">
-            {session
-              ? `Using @${session.domain || chosenDomain}. Auto-refreshing every ${session.provider === "gmail" ? "30" : "8"} seconds.`
-              : "Your address is picked at random. Incoming mail appears in the box below."}
-          </div>
-        </div>
 
-        <div className="generate-box">
-          <div className="generate-label">Gmail OTP inbox</div>
+        <div className="generate-box" id="gmail">
+          <div className="generate-label">Unlimited Gmail addresses</div>
+          <p className="gmail-lead">
+            You have one Gmail. Sites want a new Gmail every time. Generate a new address from the same account, paste the App Password once, and read OTP here.
+          </p>
+          <ol className="gmail-steps">
+            <li>Enter your real Gmail</li>
+            <li>Paste App Password, not your login password</li>
+            <li>Generate a new Gmail, copy it, and use it on the site</li>
+          </ol>
           <div className="composer gmail-composer">
             <input
               className="local-input"
@@ -497,7 +502,7 @@ export default function App() {
               onChange={(e) => setGmailTag(e.target.value)}
               spellCheck="false"
               autoCapitalize="none"
-              placeholder="alias tag e.g. shop, otp"
+              placeholder="tag e.g. shop, otp, flipkart"
             />
             <select
               className="domain-select"
@@ -514,7 +519,7 @@ export default function App() {
           </div>
           {aliasPreview && (
             <div className="alias-preview">
-              Next alias: <code>{aliasPreview}</code>
+              Next Gmail: <code>{aliasPreview}</code>
             </div>
           )}
           {savedAliases.length > 0 && (
@@ -526,7 +531,7 @@ export default function App() {
                     type="button"
                     disabled={busy}
                     onClick={() => applyGmailAlias(item)}
-                    title="Use this alias"
+                    title="Use this Gmail"
                   >
                     {item}
                   </button>
@@ -547,26 +552,58 @@ export default function App() {
           )}
           <div className="generate-row">
             <div className="address">
-              {activeGmailAlias || "Connect Gmail, then generate an alias"}
+              {activeGmailAlias || "Your next Gmail will appear here"}
             </div>
             <div className="chip-row">
               <button className="cta" disabled={busy} onClick={addGmailAlias}>
                 {savedAliases.length || session?.provider === "gmail" || gmailConn
-                  ? "Add alias"
-                  : "Connect Gmail inbox"}
+                  ? "Generate another Gmail"
+                  : "Generate Gmail"}
               </button>
               {activeGmailAlias && (
-                <button className="chip" type="button" onClick={() => copyGmailAlias(activeGmailAlias)}>
-                  Copy
-                </button>
+                <>
+                  <button className="chip" type="button" onClick={() => copyGmailAlias(activeGmailAlias)}>
+                    Copy
+                  </button>
+                  <button className="chip danger" type="button" onClick={destroyInbox}>
+                    Disconnect
+                  </button>
+                </>
               )}
             </div>
           </div>
           <div className="hint">
-            App Password is sent once to the server and never saved in this browser.{" "}
+            Same Gmail, new address every click. OTP still arrives in your real inbox. App Password is never saved in this browser.{" "}
             <button className="link-btn" onClick={() => goTo("article", "gmail-app-password")} type="button">
               Setup guide
             </button>
+          </div>
+        </div>
+
+        <div className="generate-box">
+          <div className="generate-label">Disposable temp email</div>
+          <div className="generate-row">
+            <div className="address">{session?.provider === "gmail" ? `${localPart}@${chosenDomain || "loading-domains"}` : (session?.address || `${localPart}@${chosenDomain || "loading-domains"}`)}</div>
+            <div className="chip-row">
+              <button className="cta" onClick={createInbox} disabled={busy || !chosenDomain}>
+                {session && session.provider !== "gmail" ? "Generate new" : "Generate email"}
+                <Icon d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" size={18} />
+              </button>
+              <button className="chip" onClick={randomizeAddress} disabled={busy}>
+                Random
+              </button>
+              {session && session.provider !== "gmail" && (
+                <>
+                  <button className="chip" onClick={copyAddress}>Copy</button>
+                  <button className="chip danger" onClick={destroyInbox}>Discard</button>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="hint">
+            {session && session.provider !== "gmail"
+              ? `Using @${session.domain || chosenDomain}. Auto-refreshing every 8 seconds.`
+              : "No Gmail needed. Random throwaway inbox for signups you do not trust."}
           </div>
         </div>
 
@@ -657,16 +694,20 @@ export default function App() {
                   <span className="otp-code">{selected.otp}</span>
                   <button
                     className="chip"
-                    onClick={async () => {
-                      await navigator.clipboard.writeText(selected.otp);
-                    }}
+                    onClick={() => copyText(selected.otp, "OTP copied")}
                   >
                     Copy code
                   </button>
                 </div>
               )}
               {htmlSrcDoc ? (
-                <iframe className="html-frame" title="Email body" srcDoc={htmlSrcDoc} />
+                <iframe
+                  className="html-frame"
+                  title="Email body"
+                  srcDoc={htmlSrcDoc}
+                  sandbox="allow-popups allow-popups-to-escape-sandbox"
+                  referrerPolicy="no-referrer"
+                />
               ) : (
                 <div className="body">{selected.text || selected.intro || "Empty message."}</div>
               )}
@@ -748,7 +789,14 @@ export default function App() {
               discard the inbox when you are finished.
             </dd>
           </div>
-        </dl>
+          <div>
+            <dt>Can I make unlimited Gmail addresses from one Gmail?</dt>
+            <dd>
+              Yes. Enter your Gmail and App Password once. Each Generate Gmail click
+              creates a new address like name+shop@gmail.com. Sites see a different
+              Gmail. OTP still lands in your real inbox.
+            </dd>
+          </div>
       </section>
 
       <section className="pull">

@@ -241,6 +241,10 @@ export async function readGmail(id, uid) {
       const fetched = await client.fetchOne(String(uid), { source: true, envelope: true, uid: true }, { uid: true });
       if (!fetched?.source) throw new Error("Message not found");
       const parsed = await simpleParser(fetched.source);
+      const alias = session.alias || session.email;
+      if (alias && !matchesAlias(parsed, fetched.envelope, alias)) {
+        throw new Error("Message does not belong to the selected Gmail address");
+      }
       return mapMessage(parsed, fetched.uid || uid, fetched.envelope?.date);
     } finally {
       lock.release();
